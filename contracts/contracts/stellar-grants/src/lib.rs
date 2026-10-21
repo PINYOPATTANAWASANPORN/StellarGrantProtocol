@@ -127,27 +127,28 @@ pub use types::{
     ChecklistSubmission, ClaimVestedPayload, ClawbackRequest, ClawbackStatus, CollateralDeposit,
     CollateralRequirement, CollateralStatus, ComplianceAttestation, ComplianceLevel,
     ComplianceStatus, ConditionResult, ConditionType, ContractVersion, ContributionType,
-    ContributorPortfolio, ContributorRegisterPayload, CriterionStatus, CrossChainProof,
-    CrowdfundCampaign, CrowdfundPledge, CrowdfundStatus, DaoProposal, DaoProposalStatus,
-    DaoProposalType, DashboardView, DecayConfig, DecayType, Delegation, DelegationScope, DexConfig,
-    Dispute, DisputeStatus, EscrowAccount, EscrowLifecycleState, EscrowMode, EscrowReleaseApproval,
-    EscrowReleaseRequest, EscrowState, EvidenceField, EvidenceFieldType, EvidenceSchema,
-    ExportGrant, ExportGrantPage, ExportMilestone, ExportMilestonePage, ExtensionRequest,
-    ExtensionStatus, FeeRecord, ForkRecord, FunderGrantSummary, FunderLedger, FunderReport,
-    FunderTokenSummary, Grant, GrantArchetype, GrantCard, GrantCategory, GrantDetailView,
-    GrantFund, GrantPortfolio, GrantStatus, GrantSummary, GrantTag, GrantTemplate, GrantVersion,
-    HookCallResult, HookEvent, HookRegistration, InsuranceClaim, InsurancePolicy, Invoice,
-    InvoiceStatus, IpRights, LicenseRecord, LicenseType, LineItem, LockupRecord, LockupStatus,
-    MatchingAllocation, MatchingContribution, MatchingRound, MerkleCommitment, MerkleProof,
-    MigrationRecord, Milestone, MilestoneDag, MilestoneDependency, MilestoneNft, MilestoneState,
-    MilestoneSubmission, MilestoneSubmitPayload, MilestoneTemplate, MultiGrantBatchResult,
-    MultisigProposal, MultisigSigner, NftMetadata, NotificationEvent, OracleConfig, ParamRecord,
-    ParamType, ParamValue, PauseRecord, PaymentSplit, PaymentStream, PerformanceBond,
-    PortfolioFilter, PortfolioStats, PriceQuote, ProtocolConfig, ProtocolMetrics, ProtocolModule,
-    ProvenanceRecord, PublicReview, PublicReviewSignal, QuadraticVoteRecord, RateLimitAction,
-    ReferralCode, ReferralRecord, ReferralReward, RefundCalculation, RefundPolicy,
-    RefundPolicyType, RegistryEntry, RegistryEntryType, RelayAllowance, RelayConfig, RelayDispatch,
-    RelayRecord, RelayableAction, ReleaseCondition, RenewalProposal, RenewalStatus, ReputationTier,
+    ContributorPortfolio, ContributorProfile, ContributorRegisterPayload, CriterionStatus,
+    CrossChainProof, CrowdfundCampaign, CrowdfundPledge, CrowdfundStatus, DaoProposal,
+    DaoProposalStatus, DaoProposalType, DashboardView, DecayConfig, DecayType, Delegation,
+    DelegationScope, DexConfig, Dispute, DisputeStatus, EscrowAccount, EscrowLifecycleState,
+    EscrowMode, EscrowReleaseApproval, EscrowReleaseRequest, EscrowState, EvidenceField,
+    EvidenceFieldType, EvidenceSchema, ExportGrant, ExportGrantPage, ExportMilestone,
+    ExportMilestonePage, ExtensionRequest, ExtensionStatus, FeeRecord, ForkRecord,
+    FunderGrantSummary, FunderLedger, FunderReport, FunderTokenSummary, Grant, GrantArchetype,
+    GrantCard, GrantCategory, GrantDetailView, GrantFund, GrantPortfolio, GrantStatus,
+    GrantSummary, GrantTag, GrantTemplate, GrantVersion, HookCallResult, HookEvent,
+    HookRegistration, InsuranceClaim, InsurancePolicy, Invoice, InvoiceStatus, IpRights,
+    LicenseRecord, LicenseType, LineItem, LockupRecord, LockupStatus, MatchingAllocation,
+    MatchingContribution, MatchingRound, MerkleCommitment, MerkleProof, MigrationRecord, Milestone,
+    MilestoneDag, MilestoneDependency, MilestoneNft, MilestoneState, MilestoneSubmission,
+    MilestoneSubmitPayload, MilestoneTemplate, MultiGrantBatchResult, MultisigProposal,
+    MultisigSigner, NftMetadata, NotificationEvent, OracleConfig, ParamRecord, ParamType,
+    ParamValue, PauseRecord, PaymentSplit, PaymentStream, PerformanceBond, PortfolioFilter,
+    PortfolioStats, PriceQuote, ProtocolConfig, ProtocolMetrics, ProtocolModule, ProvenanceRecord,
+    PublicReview, PublicReviewSignal, QuadraticVoteRecord, RateLimitAction, ReferralCode,
+    ReferralRecord, ReferralReward, RefundCalculation, RefundPolicy, RefundPolicyType,
+    RegistryEntry, RegistryEntryType, RelayAllowance, RelayConfig, RelayDispatch, RelayRecord,
+    RelayableAction, ReleaseCondition, RenewalProposal, RenewalStatus, ReputationTier,
     RevenueEpoch, ReviewParticipation, ReviewerAvailability, ReviewerProfile, ReviewerRequest,
     ReviewerRequestStatus, ReviewerRewardPool, ReviewerRewardRecord, ReviewerView, Role,
     RoleAssignment, RollingWindow, ScoreResult, ScoringDimension, ScoringRubric, ScoringWeight,
@@ -281,6 +282,14 @@ impl StellarGrantsContract {
     ) -> Result<(), ContractError> {
         contributor.require_auth();
         internal_contributor_register(&env, &contributor, name, bio, skills, github_url)
+    }
+
+    /// Retrieve a contributor profile by address.
+    pub fn get_contributor(
+        env: Env,
+        contributor: Address,
+    ) -> Result<ContributorProfile, ContractError> {
+        Storage::get_contributor(&env, contributor).ok_or(ContractError::InvalidInput)
     }
 
     /// Cancel a grant and refund remaining balance to funders
@@ -774,6 +783,8 @@ impl StellarGrantsContract {
                     &SubscriptionScope::PerGrant(grant_id),
                     ((grant_id as u128) << 32) | milestone_idx as u128,
                 );
+                // Issue #1155: record milestone rejection in contributor reputation
+                reputation::record_rejection(&env, &grant.owner);
                 audit::log(
                     &env,
                     grant_id,
@@ -839,7 +850,6 @@ impl StellarGrantsContract {
 
         // Issue #574: a required bond must be posted before any milestone submission.
         require_bond_posted(&env, grant_id)?;
-        require_bond_posted(&env, grant_id)?;
 
         // Issue #564: a required collateral deposit must be posted before submission.
         collateral::require_deposited(&env, grant_id, &recipient)?;
@@ -887,7 +897,6 @@ impl StellarGrantsContract {
         }
 
         // Issue #574: a required bond must be posted before any milestone submission.
-        require_bond_posted(&env, grant_id)?;
         require_bond_posted(&env, grant_id)?;
 
         // Issue #564: a required collateral deposit must be posted before submission.
