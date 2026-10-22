@@ -38,7 +38,7 @@ describe("Grant Flow Integration (Testcontainers)", () => {
 
   it("syncs contributor scores and updates reputation correctly", async () => {
     const syncService = new GrantSyncService(dataSource, sorobanClient);
-    const recipient = "GDATAPRIVACYRECPNT0000000000000000000000000000000000000"; // Grant #3 recipient (status: completed)
+    const recipient = "GDATAPRIVACYRECPNT0000000000000000000000000000000000000"; // Grant #3 recipient (completed)
 
     await syncService.syncGrant(3);
 
@@ -47,6 +47,6 @@ describe("Grant Flow Integration (Testcontainers)", () => {
 
     expect(contributor).toBeDefined();
     expect(contributor?.reputation).toBe(100);
-    expect(contributor?.totalGrantsCompleted).toBe(0); // service awards reputation but does not increment totalGrantsCompleted
+    expect(contributor?.totalGrantsCompleted).toBe(0);
   });
 });
