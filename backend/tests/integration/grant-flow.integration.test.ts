@@ -22,12 +22,12 @@ describe("Grant Flow Integration (Testcontainers)", () => {
 
   it("syncs all grants from Soroban and persists to PostgreSQL", async () => {
     const syncService = new GrantSyncService(dataSource, sorobanClient);
-    
+
     await syncService.syncAllGrants();
 
     const grantRepo = dataSource.getRepository(Grant);
     const count = await grantRepo.count();
-    
+
     // mockGrants has 4 items
     expect(count).toBe(4);
 
@@ -44,7 +44,7 @@ describe("Grant Flow Integration (Testcontainers)", () => {
 
     const contributorRepo = dataSource.getRepository(Contributor);
     const contributor = await contributorRepo.findOne({ where: { address: recipient } });
-    
+
     expect(contributor).toBeDefined();
     expect(contributor?.reputation).toBe(100);
     expect(contributor?.totalGrantsCompleted).toBe(0);
