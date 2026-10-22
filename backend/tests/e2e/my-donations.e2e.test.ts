@@ -18,17 +18,11 @@ async function seedDonations(ds: DataSource) {
   const grantRepo = ds.getRepository(Grant);
   const feeRepo = ds.getRepository(FeeCollection);
   const grant = await grantRepo.save({
-    id: 1,
     title: "Test Grant",
     status: "active",
     owner: TEST_ADDRESS,
     recipient: "GRECIPIENT1",
     totalAmount: "1000",
-    tags: null,
-    localizedMetadata: null,
-    updatedAt: new Date(),
-    proofs: [],
-    reviewers: [],
   });
   await feeRepo.save([
     {

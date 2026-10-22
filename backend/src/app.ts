@@ -237,7 +237,7 @@ export const createApp = (
     try {
       if (
         env.metricsAllowedIps.length > 0 &&
-        !env.metricsAllowedIps.includes(req.ip)
+        !env.metricsAllowedIps.includes(req.ip ?? "")
       ) {
         res.status(403).json({ error: "Forbidden" });
         return;
