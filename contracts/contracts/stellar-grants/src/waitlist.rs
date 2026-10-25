@@ -27,7 +27,6 @@ pub fn configure(
 /// Join the waitlist for a grant. Returns the position (1-indexed).
 pub fn join(env: &Env, applicant: &Address, grant_id: u64) -> Result<u32, ContractError> {
     applicant.require_auth();
-    rate_limit::check_and_increment(env, applicant, RateLimitAction::WaitlistJoin)?;
 
     let config = Storage::get_waitlist_config(env, grant_id).ok_or(ContractError::InvalidInput)?;
 
@@ -49,6 +48,11 @@ pub fn join(env: &Env, applicant: &Address, grant_id: u64) -> Result<u32, Contra
     let profile = Storage::get_contributor(env, applicant.clone())
         .ok_or(ContractError::ContributorNotFound)?;
     let reputation_snapshot = profile.reputation_score as u32;
+
+    // Only count attempts that are going to succeed, so joins rejected above
+    // (missing config, duplicate, full waitlist, unknown contributor) don't
+    // burn the applicant's quota.
+    rate_limit::check_and_increment(env, applicant, RateLimitAction::WaitlistJoin)?;
 
     let joined_at = env.ledger().timestamp();
     let position;
@@ -783,6 +787,75 @@ mod tests {
 
             let result = join(&env, &applicant, extra_grant_id);
             assert_eq!(result, Err(ContractError::InvalidInput));
+        });
+    }
+
+    #[test]
+    fn test_failed_joins_do_not_consume_rate_limit_quota() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = register(&env);
+
+        let owner = Address::generate(&env);
+        let applicant = Address::generate(&env);
+        let other = Address::generate(&env);
+        let max = crate::constants::RATE_LIMIT_WAITLIST_JOIN_MAX;
+
+        // Grant 1 has a full waitlist (taken by `other`); grant 2 has none.
+        env.as_contract(&contract_id, || {
+            setup_contributor(&env, &applicant, 500);
+            setup_contributor(&env, &other, 500);
+            setup_grant(&env, 1, &owner);
+            let config = WaitlistConfig {
+                grant_id: 1,
+                max_slots: 1,
+                max_waitlist_size: 1,
+                rank_by_reputation: false,
+                auto_promote: true,
+            };
+            configure(&env, &owner, 1, config).unwrap();
+            join(&env, &other, 1).unwrap();
+        });
+
+        // Burn well past the quota on failed attempts of every kind.
+        for _ in 0..max {
+            env.as_contract(&contract_id, || {
+                assert_eq!(join(&env, &applicant, 1), Err(ContractError::WaitlistFull));
+            });
+            env.as_contract(&contract_id, || {
+                assert_eq!(join(&env, &applicant, 2), Err(ContractError::InvalidInput));
+            });
+        }
+
+        env.as_contract(&contract_id, || {
+            assert_eq!(
+                rate_limit::get_record(&env, &applicant, RateLimitAction::WaitlistJoin),
+                None
+            );
+        });
+
+        // A legitimate join still succeeds, and a duplicate of it is not
+        // counted either.
+        env.as_contract(&contract_id, || {
+            setup_grant(&env, 3, &owner);
+            let config = WaitlistConfig {
+                grant_id: 3,
+                max_slots: 2,
+                max_waitlist_size: 10,
+                rank_by_reputation: false,
+                auto_promote: true,
+            };
+            configure(&env, &owner, 3, config).unwrap();
+            assert_eq!(join(&env, &applicant, 3), Ok(1));
+        });
+        env.as_contract(&contract_id, || {
+            assert_eq!(
+                join(&env, &applicant, 3),
+                Err(ContractError::AlreadyOnWaitlist)
+            );
+            let record =
+                rate_limit::get_record(&env, &applicant, RateLimitAction::WaitlistJoin).unwrap();
+            assert_eq!(record.count, 1);
         });
     }
 
