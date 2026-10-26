@@ -188,9 +188,22 @@ pub fn revoke(
         return Err(ContractError::LockupAlreadyRevoked);
     }
 
+    // Once revoked, `release` can no longer reach the record, so any funds
+    // already pulled in by `lock_payout` must go back to the grant owner here
+    // or they are stranded in the contract.
+    let grant = Storage::get_grant(env, grant_id).ok_or(ContractError::GrantNotFound)?;
+
     record.status = LockupStatus::Revoked;
     record.released_at = Some(env.ledger().timestamp());
     env.storage().persistent().set(&key, &record);
+
+    if record.amount > 0 {
+        token::Client::new(env, &record.token).transfer(
+            &env.current_contract_address(),
+            &grant.owner,
+            &record.amount,
+        );
+    }
 
     Ok(())
 }
@@ -596,6 +609,24 @@ mod tests {
         let record = get_lockup(&env, 1, 0).unwrap();
         assert_eq!(record.status, LockupStatus::Revoked);
         assert_eq!(record.amount, 5_000);
+    }
+
+    #[test]
+    fn revoke_returns_locked_funds_to_grant_owner() {
+        let (env, admin, owner) = setup();
+        attach_lockup(&env, &owner, 1, 0, 604_800).unwrap();
+        let payout_token = funded_token(&env, &admin);
+        lock_payout(&env, 1, 0, &admin, &payout_token, 5_000).unwrap();
+
+        let token_client = soroban_sdk::token::Client::new(&env, &payout_token);
+        let contract = crate::test_utils::in_contract(&env, || env.current_contract_address());
+        assert_eq!(token_client.balance(&contract), 5_000);
+        assert_eq!(token_client.balance(&owner), 0);
+
+        revoke(&env, &admin, 1, 0).unwrap();
+
+        assert_eq!(token_client.balance(&contract), 0);
+        assert_eq!(token_client.balance(&owner), 5_000);
     }
 
     // ── is_unlocked ───────────────────────────────────────────────────────

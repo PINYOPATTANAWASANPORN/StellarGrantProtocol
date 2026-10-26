@@ -342,6 +342,11 @@ impl StellarGrantsContract {
                     req.forfeit_on_abandon_bps,
                     forfeit_reason,
                 );
+                // The grant is about to be Cancelled, so `collateral::release`
+                // (which requires Completed) can never return what the
+                // forfeiture left; hand it back now. Errors only mean there
+                // is no releasable deposit.
+                let _ = collateral::release_authorized(&env, grant_id, &grant.owner);
             }
 
             let total_refundable = grant.escrow_balance;
