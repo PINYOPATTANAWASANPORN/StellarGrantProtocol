@@ -19,7 +19,9 @@ pub fn configure(
         return Err(ContractError::Unauthorized);
     }
 
-    if config.max_waitlist_size == 0 || config.max_waitlist_size > crate::constants::MAX_WAITLIST_SIZE {
+    if config.max_waitlist_size == 0
+        || config.max_waitlist_size > crate::constants::MAX_WAITLIST_SIZE
+    {
         return Err(ContractError::InvalidInput);
     }
     if config.max_slots == 0 || config.max_slots > crate::constants::MAX_WAITLIST_SIZE {
