@@ -924,10 +924,16 @@ mod tests {
             Storage::set_grant(&env, grant_id, &grant);
 
             // Joining on non-active grant is rejected
-            assert_eq!(join(&env, &applicant, grant_id), Err(ContractError::InvalidState));
+            assert_eq!(
+                join(&env, &applicant, grant_id),
+                Err(ContractError::InvalidState)
+            );
 
             // Promoting on non-active grant is rejected
-            assert_eq!(promote_next(&env, &owner, grant_id), Err(ContractError::InvalidState));
+            assert_eq!(
+                promote_next(&env, &owner, grant_id),
+                Err(ContractError::InvalidState)
+            );
         });
     }
 }
