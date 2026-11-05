@@ -28,12 +28,12 @@ pub fn configure(
 pub fn join(env: &Env, applicant: &Address, grant_id: u64) -> Result<u32, ContractError> {
     applicant.require_auth();
 
+    let config = Storage::get_waitlist_config(env, grant_id).ok_or(ContractError::InvalidInput)?;
+
     let grant = Storage::get_grant(env, grant_id).ok_or(ContractError::GrantNotFound)?;
     if grant.status != GrantStatus::Active {
         return Err(ContractError::InvalidState);
     }
-
-    let config = Storage::get_waitlist_config(env, grant_id).ok_or(ContractError::InvalidInput)?;
 
     let mut entries = Storage::get_waitlist_entries(env, grant_id);
 
@@ -928,7 +928,9 @@ mod tests {
                 join(&env, &applicant, grant_id),
                 Err(ContractError::InvalidState)
             );
+        });
 
+        env.as_contract(&contract_id, || {
             // Promoting on non-active grant is rejected
             assert_eq!(
                 promote_next(&env, &owner, grant_id),
